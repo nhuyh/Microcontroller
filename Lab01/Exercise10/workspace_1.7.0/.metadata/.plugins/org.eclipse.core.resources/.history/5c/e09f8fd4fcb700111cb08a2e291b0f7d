@@ -1,0 +1,129 @@
+#include "main.h"
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+
+// Mảng ánh xạ trực tiếp từ 0 đến 11 tương ứng với các chân GPIO_PIN_4 đến GPIO_PIN_15
+// Index 0  -> 12h (PA4)
+// Index 1  -> 1h  (PA5)
+// Index 2  -> 2h  (PA6)
+// ...
+// Index 11 -> 11h (PA15)
+const uint16_t LED_PINS[12] = {
+    GPIO_PIN_4,  // 0: 12h
+    GPIO_PIN_5,  // 1: 1h
+    GPIO_PIN_6,  // 2: 2h
+    GPIO_PIN_7,  // 3: 3h
+    GPIO_PIN_8,  // 4: 4h
+    GPIO_PIN_9,  // 5: 5h
+    GPIO_PIN_10, // 6: 6h
+    GPIO_PIN_11, // 7: 7h
+    GPIO_PIN_12, // 8: 8h
+    GPIO_PIN_13, // 9: 9h
+    GPIO_PIN_14, // 10: 10h
+    GPIO_PIN_15  // 11: 11h
+};
+
+// Exercise 7: Tắt tất cả 12 LED
+void clearAllClock(void) {
+    HAL_GPIO_WritePin(GPIOA,
+        GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7 |
+        GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 |
+        GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15,
+        GPIO_PIN_RESET);
+}
+
+// Exercise 8: Bật 1 LED theo vị trí num (từ 0 đến 11)
+void setNumberOnClock(int num) {
+    if (num < 0 || num > 11) return;
+    HAL_GPIO_WritePin(GPIOA, LED_PINS[num], GPIO_PIN_SET);
+}
+
+// Exercise 9: Tắt 1 LED theo vị trí num (từ 0 đến 11)
+void clearNumberOnClock(int num) {
+    if (num < 0 || num > 11) return;
+    HAL_GPIO_WritePin(GPIOA, LED_PINS[num], GPIO_PIN_RESET);
+}
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+
+  int hour = 0;   // 0-11
+  int minute = 0; // 0-59
+  int second = 0; // 0-59
+
+  while (1)
+  {
+      /* Exercise 10: Tích hợp hiển thị đồng hồ 3 LED (Giờ, Phút, Giây) */
+      clearAllClock();
+
+      int sec_pos = second / 5;   // 60s chia làm 12 nấc (mỗi nấc 5s)
+      int min_pos = minute / 5;   // 60m chia làm 12 nấc
+      int hour_pos = hour % 12;   // 12 giờ
+
+      // Bật 3 LED đại diện cho Giờ - Phút - Giây
+      setNumberOnClock(sec_pos);
+      setNumberOnClock(min_pos);
+      setNumberOnClock(hour_pos);
+
+      HAL_Delay(1000); // Đếm mỗi giây
+
+      second++;
+      if (second >= 60) {
+          second = 0;
+          minute++;
+          if (minute >= 60) {
+              minute = 0;
+              hour++;
+              if (hour >= 12) {
+                  hour = 0;
+              }
+          }
+      }
+  }
+}
+
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /* Ban đầu tắt tất cả các chân LED */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /* Cấu hình chân PA4 -> PA15 làm Push-Pull Output */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  HAL_RCC_OscConfig(&RCC_OscInitStruct);
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0);
+}

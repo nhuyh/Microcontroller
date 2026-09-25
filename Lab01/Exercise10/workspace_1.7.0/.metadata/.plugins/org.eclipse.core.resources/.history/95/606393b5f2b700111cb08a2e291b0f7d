@@ -1,0 +1,201 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Exercise 5 - Traffic Light with 7SEG Countdown Sync
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+#include "main.h"
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+
+// Bảng mã LED 7 đoạn Anode chung (0: Sáng, 1: Tắt)[cite: 2]
+const uint8_t seg_codes[10][7] = {
+    {0, 0, 0, 0, 0, 0, 1}, // Số 0
+    {1, 0, 0, 1, 1, 1, 1}, // Số 1
+    {0, 0, 1, 0, 0, 1, 0}, // Số 2
+    {0, 0, 0, 0, 1, 1, 0}, // Số 3
+    {1, 0, 0, 1, 1, 0, 0}, // Số 4
+    {0, 1, 0, 0, 1, 0, 0}, // Số 5
+    {0, 1, 0, 0, 0, 0, 0}, // Số 6
+    {0, 0, 0, 1, 1, 1, 1}, // Số 7
+    {0, 0, 0, 0, 0, 0, 0}, // Số 8
+    {0, 0, 0, 0, 1, 0, 0}  // Số 9
+};
+
+// Hàm hiển thị LED 7 đoạn 1 (Chân PB0 -> PB6)
+void display7SEG_1(int num) {
+    if (num < 0 || num > 9) return;
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, seg_codes[num][0]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, seg_codes[num][1]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, seg_codes[num][2]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, seg_codes[num][3]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, seg_codes[num][4]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, seg_codes[num][5]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, seg_codes[num][6]);
+}
+
+// Hàm hiển thị LED 7 đoạn 2 (Chân PA0 -> PA6)
+void display7SEG_2(int num) {
+    if (num < 0 || num > 9) return;
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, seg_codes[num][0]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, seg_codes[num][1]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, seg_codes[num][2]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, seg_codes[num][3]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, seg_codes[num][4]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, seg_codes[num][5]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, seg_codes[num][6]);
+}
+
+// Hàm bật/tắt đèn giao thông
+void setTrafficLight(uint8_t state1, uint8_t state2) {
+    // Hướng 1: 0-Tắt, 1-Đỏ, 2-Vàng, 3-Xanh
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, (state1 == 1) ? GPIO_PIN_SET : GPIO_PIN_RESET); // RED 1
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, (state1 == 2) ? GPIO_PIN_SET : GPIO_PIN_RESET); // YELLOW 1
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, (state1 == 3) ? GPIO_PIN_SET : GPIO_PIN_RESET); // GREEN 1
+
+    // Hướng 2: 0-Tắt, 1-Đỏ, 2-Vàng, 3-Xanh
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, (state2 == 1) ? GPIO_PIN_SET : GPIO_PIN_RESET); // RED 2
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, (state2 == 2) ? GPIO_PIN_SET : GPIO_PIN_RESET); // YELLOW 2
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, (state2 == 3) ? GPIO_PIN_SET : GPIO_PIN_RESET); // GREEN 2
+}
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+
+  // Định nghĩa các trạng thái Đèn (1: Red, 2: Yellow, 3: Green)
+  #define STATE_RED_GREEN   0
+  #define STATE_RED_YELLOW  1
+  #define STATE_GREEN_RED   2
+  #define STATE_YELLOW_RED  3
+
+  int state = STATE_RED_GREEN;
+  int count1 = 5; // Thời gian Đỏ 1 = 5s
+  int count2 = 3; // Thời gian Xanh 2 = 3s
+
+  while (1)
+  {
+      // Cập nhật trạng thái đèn dựa trên chu kỳ
+      switch (state) {
+          case STATE_RED_GREEN: // Hướng 1 Đỏ (5s), Hướng 2 Xanh (3s)
+              setTrafficLight(1, 3);
+              break;
+          case STATE_RED_YELLOW: // Hướng 1 Đỏ, Hướng 2 Vàng (2s)
+              setTrafficLight(1, 2);
+              break;
+          case STATE_GREEN_RED: // Hướng 1 Xanh (3s), Hướng 2 Đỏ (5s)
+              setTrafficLight(3, 1);
+              break;
+          case STATE_YELLOW_RED: // Hướng 1 Vàng (2s), Hướng 2 Đỏ
+              setTrafficLight(2, 1);
+              break;
+      }
+
+      // Hiển thị thời gian đếm ngược lên LED 7 đoạn
+      display7SEG_1(count1);
+      display7SEG_2(count2);
+
+      HAL_Delay(1000); // Đợi 1 giây[cite: 2]
+
+      // Giảm bộ đếm thời gian
+      count1--;
+      count2--;
+
+      // Chuyển trạng thái khi hết thời gian tương ứng
+      if (count2 <= 0) {
+          if (state == STATE_RED_GREEN) {
+              state = STATE_RED_YELLOW;
+              count2 = 2; // Vàng 2 đếm 2s
+          }
+          else if (state == STATE_GREEN_RED) {
+              state = STATE_YELLOW_RED;
+              count1 = 2; // Vàng 1 đếm 2s
+          }
+      }
+
+      if (count1 <= 0) {
+          if (state == STATE_RED_YELLOW) {
+              state = STATE_GREEN_RED;
+              count1 = 3; // Xanh 1 đếm 3s
+              count2 = 5; // Đỏ 2 đếm 5s
+          }
+          else if (state == STATE_YELLOW_RED) {
+              state = STATE_RED_GREEN;
+              count1 = 5; // Đỏ 1 đếm 5s
+              count2 = 3; // Xanh 2 đếm 3s
+          }
+      }
+  }
+}
+
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /* Set Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
+                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
+                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6, GPIO_PIN_RESET);
+
+  /* Configure GPIO pins : PORT A */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
+                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* Configure GPIO pins : PORT B */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
+                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+}
+
+void Error_Handler(void)
+{
+  __disable_irq();
+  while (1) {}
+}

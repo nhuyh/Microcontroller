@@ -1,0 +1,326 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Exercise 5 - Traffic light synchronized with 7-SEG
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+/* USER CODE BEGIN PV */
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+// Bảng mã LED 7 đoạn Anode chung (0: Sáng, 1: Tắt)[cite: 2]
+const uint8_t seg_codes[10][7] = {
+    {0, 0, 0, 0, 0, 0, 1}, // Số 0
+    {1, 0, 0, 1, 1, 1, 1}, // Số 1
+    {0, 0, 1, 0, 0, 1, 0}, // Số 2
+    {0, 0, 0, 0, 1, 1, 0}, // Số 3
+    {1, 0, 0, 1, 1, 0, 0}, // Số 4
+    {0, 1, 0, 0, 1, 0, 0}, // Số 5
+    {0, 1, 0, 0, 0, 0, 0}, // Số 6
+    {0, 0, 0, 1, 1, 1, 1}, // Số 7
+    {0, 0, 0, 0, 0, 0, 0}, // Số 8
+    {0, 0, 0, 0, 1, 0, 0}  // Số 9
+};
+
+// LED 1 (Nhãn HOA A..G): Chân PB0 đến PB6
+void display7SEG_1(int num) {
+    if (num < 0 || num > 9) return;
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, seg_codes[num][0]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, seg_codes[num][1]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, seg_codes[num][2]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, seg_codes[num][3]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, seg_codes[num][4]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, seg_codes[num][5]);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, seg_codes[num][6]);
+}
+
+// LED 2 (Nhãn THƯỜNG a..g): Chân PA0 đến PA6
+void display7SEG_2(int num) {
+    if (num < 0 || num > 9) return;
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, seg_codes[num][0]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, seg_codes[num][1]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, seg_codes[num][2]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, seg_codes[num][3]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, seg_codes[num][4]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, seg_codes[num][5]);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, seg_codes[num][6]);
+}
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  /* USER CODE BEGIN 2 */
+  // �?ịnh nghĩa các khoảng th�?i gian (giây)
+  int red_time = 5;
+  int yellow_time = 2;
+  int green_time = 3;
+
+  // Trạng thái ban đầu:
+  // Hướng 1: �?�? (5s) -> đếm từ 5 v�? 1
+  // Hướng 2: Xanh (3s) -> đếm từ 3 v�? 1
+  int count1 = red_time;
+  int count2 = green_time;
+
+  // Biến quản lý pha của từng hướng
+  // 0: RED, 1: YELLOW, 2: GREEN
+  int phase1 = 0;
+  int phase2 = 2;
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+      // --- 1. �?IỀU KHIỂN �?ÈN TỪNG HƯỚNG ---
+      // Hướng 1
+      if (phase1 == 0) {       // RED 1
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);   // Red ON
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET); // Yellow OFF
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET); // Green OFF
+      } else if (phase1 == 1) { // YELLOW 1
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+      } else if (phase1 == 2) { // GREEN 1
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+      }
+
+      // Hướng 2
+      if (phase2 == 0) {       // RED 2
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);  // Red ON
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+      } else if (phase2 == 1) { // YELLOW 2
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+      } else if (phase2 == 2) { // GREEN 2
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
+      }
+
+      // --- 2. HIỂN THỊ THỜI GIAN �?ẾM NGƯỢC ---
+      display7SEG_1(count1);
+      display7SEG_2(count2);
+
+      HAL_Delay(1000); // �?ợi 1 giây[cite: 2]
+
+      // --- 3. GIẢM BỘ �?ẾM VÀ CHUYỂN PHA �?ÈN ---
+      count1--;
+      count2--;
+
+      // Kiểm tra chuyển pha cho Hướng 1
+      if (count1 <= 0) {
+          if (phase1 == 0) {        // Hết �?�? 1 -> Chuyển Xanh 1
+              phase1 = 2;
+              count1 = green_time;
+          } else if (phase1 == 2) { // Hết Xanh 1 -> Chuyển Vàng 1
+              phase1 = 1;
+              count1 = yellow_time;
+          } else if (phase1 == 1) { // Hết Vàng 1 -> Chuyển �?�? 1
+              phase1 = 0;
+              count1 = red_time;
+          }
+      }
+
+      // Kiểm tra chuyển pha cho Hướng 2
+      if (count2 <= 0) {
+          if (phase2 == 0) {        // Hết �?�? 2 -> Chuyển Xanh 2
+              phase2 = 2;
+              count2 = green_time;
+          } else if (phase2 == 2) { // Hết Xanh 2 -> Chuyển Vàng 2
+              phase2 = 1;
+              count2 = yellow_time;
+          } else if (phase2 == 1) { // Hết Vàng 2 -> Chuyển �?�? 2
+              phase2 = 0;
+              count2 = red_time;
+          }
+      }
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, a_Pin_Pin|b_Pin_Pin|c_Pin_Pin|d_Pin_Pin
+                          |e_Pin_Pin|f_Pin_Pin|g_Pin_Pin|GPIO_PIN_8
+                          |GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, A_Pin_Pin|B_Pin_Pin|C_Pin_Pin|D_Pin_Pin
+                          |E_Pin_Pin|F_Pin_Pin|G_Pin_Pin|GPIO_PIN_7, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : a_Pin_Pin b_Pin_Pin c_Pin_Pin d_Pin_Pin
+                           e_Pin_Pin f_Pin_Pin g_Pin_Pin PA8
+                           PA9 PA10 PA11 PA12 */
+  GPIO_InitStruct.Pin = a_Pin_Pin|b_Pin_Pin|c_Pin_Pin|d_Pin_Pin
+                          |e_Pin_Pin|f_Pin_Pin|g_Pin_Pin|GPIO_PIN_8
+                          |GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : A_Pin_Pin B_Pin_Pin C_Pin_Pin D_Pin_Pin
+                           E_Pin_Pin F_Pin_Pin G_Pin_Pin PB7 */
+  GPIO_InitStruct.Pin = A_Pin_Pin|B_Pin_Pin|C_Pin_Pin|D_Pin_Pin
+                          |E_Pin_Pin|F_Pin_Pin|G_Pin_Pin|GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

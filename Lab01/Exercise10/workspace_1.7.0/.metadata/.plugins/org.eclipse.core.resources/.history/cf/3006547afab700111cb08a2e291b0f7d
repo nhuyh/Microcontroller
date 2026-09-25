@@ -1,0 +1,119 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Lab 1 Exercise 6 - 12 LEDs Clock Display
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+
+#include "main.h"
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+
+// Hàm tắt tất cả 12 LED
+void clearAllClock(void) {
+    for (int i = 4; i <= 15; i++) {
+        HAL_GPIO_WritePin(GPIOA, (1 << i), GPIO_PIN_RESET);
+    }
+}
+
+// Hàm bật 1 vị trí LED tương ứng với số trên mặt đồng hồ (1 đến 12)
+void setNumberOnClock(int num) {
+    if (num < 1 || num > 12) return;
+
+    // Số 12 tương ứng chân PA15, số 1..11 tương ứng PA4..PA14
+    if (num == 12) {
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_SET);
+    } else {
+        HAL_GPIO_WritePin(GPIOA, (1 << (num + 3)), GPIO_PIN_SET);
+    }
+}
+
+// Hàm tắt 1 vị trí LED tương ứng
+void clearNumberOnClock(int num) {
+    if (num < 1 || num > 12) return;
+
+    if (num == 12) {
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
+    } else {
+        HAL_GPIO_WritePin(GPIOA, (1 << (num + 3)), GPIO_PIN_RESET);
+    }
+}
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+
+  int hour = 0;
+  int minute = 0;
+  int second = 0;
+
+  while (1)
+  {
+      clearAllClock();
+
+      // Hiển thị vị trí kim giờ, kim phút, kim giây trên mặt 12 LED
+      setNumberOnClock((hour == 0) ? 12 : hour);
+      setNumberOnClock((minute / 5 == 0) ? 12 : (minute / 5));
+      setNumberOnClock((second / 5 == 0) ? 12 : (second / 5));
+
+      HAL_Delay(1000); // Đếm mỗi giây
+
+      second++;
+      if (second >= 60) {
+          second = 0;
+          minute++;
+          if (minute >= 60) {
+              minute = 0;
+              hour++;
+              if (hour >= 12) {
+                  hour = 0;
+              }
+          }
+      }
+  }
+}
+
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7
+                          |GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
+
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  HAL_RCC_OscConfig(&RCC_OscInitStruct);
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0);
+}

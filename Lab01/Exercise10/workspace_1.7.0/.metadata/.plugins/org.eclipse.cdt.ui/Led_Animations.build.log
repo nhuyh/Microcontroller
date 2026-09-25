@@ -1,0 +1,23 @@
+16:51:18 **** Incremental Build of configuration Debug for project Led_Animations ****
+make -j22 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m3 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F103x6 -c -I../Core/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F1xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+arm-none-eabi-gcc -o "Led_Animations.elf" @"objects.list"   -mcpu=cortex-m3 -T"C:\Users\Admin\STM32CubeIDE\workspace_1.7.0\Led_Animations\STM32F103C6UX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Led_Animations.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: Led_Animations.elf
+ 
+arm-none-eabi-size   Led_Animations.elf 
+arm-none-eabi-objdump -h -S  Led_Animations.elf  > "Led_Animations.list"
+arm-none-eabi-objcopy  -O ihex  Led_Animations.elf  "Led_Animations.hex"
+   text	   data	    bss	    dec	    hex	filename
+   4736	     20	   1572	   6328	   18b8	Led_Animations.elf
+arm-none-eabi-objcopy  -O binary  Led_Animations.elf  "Led_Animations.bin"
+Finished building: default.size.stdout
+ 
+Finished building: Led_Animations.hex
+Finished building: Led_Animations.bin
+Finished building: Led_Animations.list
+ 
+ 
+ 
+
+16:51:19 Build Finished. 0 errors, 0 warnings. (took 480ms)
+
