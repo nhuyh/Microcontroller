@@ -1,0 +1,128 @@
+#include "main.h"
+TIM_HandleTypeDef htim2;
+#define MAX_LED 4
+#define TIMER_CYCLE 10
+
+/* ---------- Bai 9: cau hinh LED matrix ---------- */
+#define MAX_LED_MATRIX 8
+#define COL_MASK (GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15)
+#define ROW_MASK 0xFF00            /* PB8..PB15 */
+#define COL_ACTIVE_HIGH 0          /* 0: cot active muc thap, 1: active muc cao */
+#define ROW_INVERT 0               /* 0: bit 1 = bat o muc cao, 1: dao lai */
+
+int index_led_matrix = 0;
+uint8_t matrix_buffer[8] = {0x00,0xFE,0x11,0x11,0x11,0xFE,0x00,0x00}; /* chu A */
+static const uint16_t col_pin[8] = {GPIO_PIN_2,GPIO_PIN_3,GPIO_PIN_10,GPIO_PIN_11,
+                                    GPIO_PIN_12,GPIO_PIN_13,GPIO_PIN_14,GPIO_PIN_15};
+/* ------------------------------------------------ */
+
+int led_buffer[4]={1,2,3,4}, index_led=0;
+int hour=15, minute=8, second=50, dot_state=0;
+volatile int timer0_counter=0,timer0_flag=0;
+volatile int timer1_counter=0,timer1_flag=0;
+volatile int timer2_counter=0,timer2_flag=0;
+volatile int timer3_counter=0,timer3_flag=0;
+volatile int scan_counter=0,dot_counter=0;
+
+void SystemClock_Config(void); static void MX_GPIO_Init(void); static void MX_TIM2_Init(void);
+void clear7SEG(void); void display7SEG(int n); void disableAllDigits(void); void update7SEG(int i);
+void updateClockBuffer(void); void setTimer0(int d); void setTimer1(int d); void setTimer2(int d); void setTimer3(int d);
+void timer_run(void); void updateLEDMatrix(int index);
+
+void clear7SEG(void){ HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6,GPIO_PIN_SET); }
+void display7SEG(int n){
+ const unsigned char c[10]={0x40,0x79,0x24,0x30,0x19,0x12,0x02,0x78,0x00,0x10};
+ if(n<0||n>9){clear7SEG();return;}
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_0,(c[n]&1)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,(c[n]&2)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_2,(c[n]&4)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_3,(c[n]&8)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_4,(c[n]&16)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_5,(c[n]&32)?GPIO_PIN_SET:GPIO_PIN_RESET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_6,(c[n]&64)?GPIO_PIN_SET:GPIO_PIN_RESET);
+}
+void disableAllDigits(void){HAL_GPIO_WritePin(GPIOA,GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9,GPIO_PIN_SET);}
+void update7SEG(int i){
+ disableAllDigits(); if(i<0||i>=4){clear7SEG();return;} display7SEG(led_buffer[i]);
+ switch(i){case 0:HAL_GPIO_WritePin(GPIOA,GPIO_PIN_6,GPIO_PIN_RESET);break;
+ case 1:HAL_GPIO_WritePin(GPIOA,GPIO_PIN_7,GPIO_PIN_RESET);break;
+ case 2:HAL_GPIO_WritePin(GPIOA,GPIO_PIN_8,GPIO_PIN_RESET);break;
+ case 3:HAL_GPIO_WritePin(GPIOA,GPIO_PIN_9,GPIO_PIN_RESET);break;default:break;}
+}
+void updateClockBuffer(void){led_buffer[0]=hour/10;led_buffer[1]=hour%10;led_buffer[2]=minute/10;led_buffer[3]=minute%10;}
+
+/* ---------- Bai 9: quet LED matrix ---------- */
+void updateLEDMatrix(int index){
+ if(index<0||index>=MAX_LED_MATRIX) return;
+ /* 1. tat het cot */
+#if COL_ACTIVE_HIGH
+ GPIOA->BSRR = (uint32_t)COL_MASK << 16;
+#else
+ GPIOA->BSRR = COL_MASK;
+#endif
+ /* 2. xuat du lieu hang len PB8..PB15 (khong dung PB0..PB6 cua LED 7 doan) */
+ uint8_t v = matrix_buffer[index] ^ (ROW_INVERT ? 0xFF : 0x00);
+ GPIOB->BSRR = ((uint32_t)v << 8) | ((uint32_t)(uint8_t)(~v) << 24);
+ /* 3. bat cot index */
+#if COL_ACTIVE_HIGH
+ GPIOA->BSRR = col_pin[index];
+#else
+ GPIOA->BSRR = (uint32_t)col_pin[index] << 16;
+#endif
+}
+/* -------------------------------------------- */
+
+void setTimer0(int d){timer0_counter=d/TIMER_CYCLE;timer0_flag=0;}
+void setTimer1(int d){timer1_counter=d/TIMER_CYCLE;timer1_flag=0;}
+void setTimer2(int d){timer2_counter=d/TIMER_CYCLE;timer2_flag=0;}
+void setTimer3(int d){timer3_counter=d/TIMER_CYCLE;timer3_flag=0;}
+void timer_run(void){
+ if(timer0_counter>0&&--timer0_counter==0)timer0_flag=1;
+ if(timer1_counter>0&&--timer1_counter==0)timer1_flag=1;
+ if(timer2_counter>0&&--timer2_counter==0)timer2_flag=1;
+ if(timer3_counter>0&&--timer3_counter==0)timer3_flag=1;
+}
+void SystemClock_Config(void){
+ RCC_OscInitTypeDef o={0}; RCC_ClkInitTypeDef c={0};
+ o.OscillatorType=RCC_OSCILLATORTYPE_HSI;o.HSIState=RCC_HSI_ON;o.HSICalibrationValue=RCC_HSICALIBRATION_DEFAULT;o.PLL.PLLState=RCC_PLL_NONE;
+ if(HAL_RCC_OscConfig(&o)!=HAL_OK)Error_Handler();
+ c.ClockType=RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+ c.SYSCLKSource=RCC_SYSCLKSOURCE_HSI;c.AHBCLKDivider=RCC_SYSCLK_DIV1;c.APB1CLKDivider=RCC_HCLK_DIV1;c.APB2CLKDivider=RCC_HCLK_DIV1;
+ if(HAL_RCC_ClockConfig(&c,FLASH_LATENCY_0)!=HAL_OK)Error_Handler();
+}
+static void MX_TIM2_Init(void){
+ TIM_ClockConfigTypeDef s={0};TIM_MasterConfigTypeDef m={0};
+ htim2.Instance=TIM2;htim2.Init.Prescaler=7999;htim2.Init.CounterMode=TIM_COUNTERMODE_UP;htim2.Init.Period=9;htim2.Init.ClockDivision=TIM_CLOCKDIVISION_DIV1;htim2.Init.AutoReloadPreload=TIM_AUTORELOAD_PRELOAD_DISABLE;
+ if(HAL_TIM_Base_Init(&htim2)!=HAL_OK)Error_Handler();s.ClockSource=TIM_CLOCKSOURCE_INTERNAL;
+ if(HAL_TIM_ConfigClockSource(&htim2,&s)!=HAL_OK)Error_Handler();m.MasterOutputTrigger=TIM_TRGO_RESET;m.MasterSlaveMode=TIM_MASTERSLAVEMODE_DISABLE;
+ if(HAL_TIMEx_MasterConfigSynchronization(&htim2,&m)!=HAL_OK)Error_Handler();
+}
+static void MX_GPIO_Init(void){
+ GPIO_InitTypeDef g={0};__HAL_RCC_GPIOA_CLK_ENABLE();__HAL_RCC_GPIOB_CLK_ENABLE();
+ HAL_GPIO_WritePin(GPIOA,GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9,GPIO_PIN_SET);
+ HAL_GPIO_WritePin(GPIOB,GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6,GPIO_PIN_SET);
+ g.Pin=GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;g.Mode=GPIO_MODE_OUTPUT_PP;g.Pull=GPIO_NOPULL;g.Speed=GPIO_SPEED_FREQ_LOW;HAL_GPIO_Init(GPIOA,&g);
+ g.Pin=GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6;HAL_GPIO_Init(GPIOB,&g);
+ /* Bai 9: cot (PA) va du lieu hang (PB8..PB15) cua LED matrix */
+ HAL_GPIO_WritePin(GPIOA,COL_MASK,GPIO_PIN_SET);
+ HAL_GPIO_WritePin(GPIOB,ROW_MASK,GPIO_PIN_RESET);
+ g.Pin=COL_MASK; HAL_GPIO_Init(GPIOA,&g);
+ g.Pin=ROW_MASK; HAL_GPIO_Init(GPIOB,&g);
+}
+void Error_Handler(void){__disable_irq();while(1){}}
+
+/* Bai 9: ngat TIM2 chi cap nhat software timers; xu ly con lai trong main. */
+int main(void){
+ HAL_Init();SystemClock_Config();MX_GPIO_Init();MX_TIM2_Init();
+ HAL_GPIO_WritePin(GPIOA,GPIO_PIN_5,GPIO_PIN_RESET);
+ disableAllDigits();updateClockBuffer();
+ setTimer0(1000);setTimer1(10);setTimer2(1000);setTimer3(10);
+ HAL_TIM_Base_Start_IT(&htim2);
+ while(1){
+  if(timer0_flag){timer0_flag=0;second++;if(second>=60){second=0;minute++;}if(minute>=60){minute=0;hour++;}if(hour>=24)hour=0;updateClockBuffer();setTimer0(1000);}
+  if(timer1_flag){timer1_flag=0;update7SEG(index_led);index_led=(index_led+1)%4;setTimer1(10);}
+  if(timer2_flag){timer2_flag=0;dot_state=!dot_state;HAL_GPIO_WritePin(GPIOA,GPIO_PIN_4,dot_state?GPIO_PIN_RESET:GPIO_PIN_SET);setTimer2(1000);}
+  if(timer3_flag){timer3_flag=0;updateLEDMatrix(index_led_matrix);index_led_matrix=(index_led_matrix+1)%MAX_LED_MATRIX;setTimer3(10);}
+ }
+}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *h){if(h->Instance==TIM2)timer_run();}

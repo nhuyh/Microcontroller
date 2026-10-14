@@ -1,0 +1,295 @@
+/* USER CODE BEGIN Header */
+/**
+  * @file    main.c
+  * @brief   Lab 2 - Bai 1..10 (7-SEG + DOT + LED matrix, software timer)
+  *
+  * Pin map (theo schematic Proteus):
+  *   PB0..PB6   : 7 doan cua LED 7 doan (a..g)
+  *   PB8..PB15  : m0..m7  (du lieu hang ma tran)
+  *   PA2,PA3,PA10..PA15 : c0..c7 (chon cot ma tran)
+  *   PA4        : DOT (D2 + D3)
+  *   PA5        : Led_Red (D1)
+  *   PA6..PA9   : EN0..EN3 (chon LED 7 doan)
+  */
+/* USER CODE END Header */
+#include "main.h"
+
+TIM_HandleTypeDef htim2;
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM2_Init(void);
+
+/* USER CODE BEGIN 0 */
+#define MAX_LED         4
+#define MAX_LED_MATRIX  8
+#define TIMER_CYCLE     10
+
+/* Muc logic. Neu ma tran hien thi sai (mo / dao / lech) thi doi cac macro nay */
+#define COL_ON_LEVEL    GPIO_PIN_SET    /* muc cua chan cot khi cot duoc bat */
+#define ROW_ON_LEVEL    GPIO_PIN_SET    /* muc cua chan hang khi LED sang   */
+
+#define DOT_PIN         GPIO_PIN_4
+#define LEDRED_PIN      GPIO_PIN_5
+
+static const uint16_t seg_pin[7] = {GPIO_PIN_0,GPIO_PIN_1,GPIO_PIN_2,GPIO_PIN_3,
+                                    GPIO_PIN_4,GPIO_PIN_5,GPIO_PIN_6};
+static const uint16_t en_pin[4]  = {GPIO_PIN_6,GPIO_PIN_7,GPIO_PIN_8,GPIO_PIN_9};          /* GPIOA */
+static const uint16_t row_pin[8] = {GPIO_PIN_8,GPIO_PIN_9,GPIO_PIN_10,GPIO_PIN_11,
+                                    GPIO_PIN_12,GPIO_PIN_13,GPIO_PIN_14,GPIO_PIN_15};     /* GPIOB */
+static const uint16_t col_pin[8] = {GPIO_PIN_2,GPIO_PIN_3,GPIO_PIN_10,GPIO_PIN_11,
+                                    GPIO_PIN_12,GPIO_PIN_13,GPIO_PIN_14,GPIO_PIN_15};     /* GPIOA */
+
+/* ---------- LED 7 doan ---------- */
+int index_led = 0;
+int led_buffer[4] = {1, 2, 3, 4};
+int hour = 15, minute = 8, second = 50;
+
+void display7SEG(int num)
+{
+    /* anode chung: bit = 1 -> doan tat */
+    static const uint8_t code[10] = {0x40,0x79,0x24,0x30,0x19,0x12,0x02,0x78,0x00,0x10};
+    int i;
+    if (num < 0 || num > 9) num = 8;
+    for (i = 0; i < 7; i++)
+        HAL_GPIO_WritePin(GPIOB, seg_pin[i], (code[num] >> i) & 1 ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+void update7SEG(int index)
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        HAL_GPIO_WritePin(GPIOA, en_pin[i], GPIO_PIN_SET);      /* tat het */
+    if (index < 0 || index >= MAX_LED) return;
+    display7SEG(led_buffer[index]);
+    HAL_GPIO_WritePin(GPIOA, en_pin[index], GPIO_PIN_RESET);    /* bat LED index */
+}
+
+void updateClockBuffer(void)
+{
+    led_buffer[0] = hour / 10;
+    led_buffer[1] = hour % 10;
+    led_buffer[2] = minute / 10;
+    led_buffer[3] = minute % 10;
+}
+
+/* ---------- Software timer ---------- */
+volatile int timer0_counter = 0, timer0_flag = 0;
+volatile int timer1_counter = 0, timer1_flag = 0;
+volatile int timer2_counter = 0, timer2_flag = 0;
+
+void setTimer0(int duration){ timer0_counter = duration / TIMER_CYCLE; timer0_flag = 0; }
+void setTimer1(int duration){ timer1_counter = duration / TIMER_CYCLE; timer1_flag = 0; }
+void setTimer2(int duration){ timer2_counter = duration / TIMER_CYCLE; timer2_flag = 0; }
+
+void timer_run(void)
+{
+    if (timer0_counter > 0 && --timer0_counter == 0) timer0_flag = 1;
+    if (timer1_counter > 0 && --timer1_counter == 0) timer1_flag = 1;
+    if (timer2_counter > 0 && --timer2_counter == 0) timer2_flag = 1;
+}
+
+/* ---------- LED matrix ---------- */
+int index_led_matrix = 0;
+int matrix_shift_count = 0;
+
+const uint8_t matrix_A[8] = {0x00,0x7E,0x11,0x11,0x11,0x7E,0x00,0x00};
+uint8_t matrix_buffer[8]  = {0x00,0x7E,0x11,0x11,0x11,0x7E,0x00,0x00};
+
+void turnOffMatrix(void)
+{
+    int i;
+    for (i = 0; i < 8; i++)
+        HAL_GPIO_WritePin(GPIOA, col_pin[i], COL_ON_LEVEL == GPIO_PIN_SET ? GPIO_PIN_RESET : GPIO_PIN_SET);
+}
+
+void writeMatrixRows(uint8_t data)
+{
+    int i;
+    for (i = 0; i < 8; i++)
+    {
+        GPIO_PinState on  = ROW_ON_LEVEL;
+        GPIO_PinState off = (ROW_ON_LEVEL == GPIO_PIN_SET) ? GPIO_PIN_RESET : GPIO_PIN_SET;
+        HAL_GPIO_WritePin(GPIOB, row_pin[i], ((data >> i) & 1) ? on : off);
+    }
+}
+
+void updateLEDMatrix(int index)
+{
+    if (index < 0 || index >= MAX_LED_MATRIX) return;
+    turnOffMatrix();
+    writeMatrixRows(matrix_buffer[index]);
+    switch (index)
+    {
+        case 0: HAL_GPIO_WritePin(GPIOA, col_pin[0], COL_ON_LEVEL); break;
+        case 1: HAL_GPIO_WritePin(GPIOA, col_pin[1], COL_ON_LEVEL); break;
+        case 2: HAL_GPIO_WritePin(GPIOA, col_pin[2], COL_ON_LEVEL); break;
+        case 3: HAL_GPIO_WritePin(GPIOA, col_pin[3], COL_ON_LEVEL); break;
+        case 4: HAL_GPIO_WritePin(GPIOA, col_pin[4], COL_ON_LEVEL); break;
+        case 5: HAL_GPIO_WritePin(GPIOA, col_pin[5], COL_ON_LEVEL); break;
+        case 6: HAL_GPIO_WritePin(GPIOA, col_pin[6], COL_ON_LEVEL); break;
+        case 7: HAL_GPIO_WritePin(GPIOA, col_pin[7], COL_ON_LEVEL); break;
+        default: break;
+    }
+}
+
+void matrixScanTask(void)
+{
+    static uint32_t last_scan = 0;
+    if ((HAL_GetTick() - last_scan) >= 2)
+    {
+        last_scan = HAL_GetTick();
+        updateLEDMatrix(index_led_matrix);
+        index_led_matrix = (index_led_matrix + 1) % MAX_LED_MATRIX;
+    }
+}
+
+void loadLetterA(void)
+{
+    int i;
+    for (i = 0; i < MAX_LED_MATRIX; i++) matrix_buffer[i] = matrix_A[i];
+    matrix_shift_count = 0;
+}
+
+/* Bai 10: dich chu A sang trai (cot 0 la cot trai nhat) */
+void shiftMatrixLeft(void)
+{
+    int i;
+    for (i = 0; i < MAX_LED_MATRIX - 1; i++)
+        matrix_buffer[i] = matrix_buffer[i + 1];
+    matrix_buffer[MAX_LED_MATRIX - 1] = 0x00;
+
+    matrix_shift_count++;
+    if (matrix_shift_count >= 8)
+        loadLetterA();
+}
+/* USER CODE END 0 */
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_TIM2_Init();
+
+  /* USER CODE BEGIN 2 */
+  updateClockBuffer();
+  loadLetterA();
+  setTimer0(1000);   /* 1s: chay dong ho + nhap nhay D2, D3 (DOT) */
+  setTimer1(250);    /* 250ms moi LED 7 doan -> quet 1Hz (bai 4)   */
+  setTimer2(500);    /* 500ms: dich chu A sang trai (bai 10)       */
+  HAL_TIM_Base_Start_IT(&htim2);
+  /* USER CODE END 2 */
+
+  while (1)
+  {
+      if (timer0_flag == 1)
+      {
+          second++;
+          if (second >= 60) { second = 0; minute++; }
+          if (minute >= 60) { minute = 0; hour++; }
+          if (hour >= 24)   { hour = 0; }
+          updateClockBuffer();
+
+          HAL_GPIO_TogglePin(GPIOA, DOT_PIN);   /* D2 + D3 nhap nhay */
+
+          setTimer0(1000);
+      }
+
+      if (timer1_flag == 1)
+      {
+          update7SEG(index_led);
+          index_led = (index_led + 1) % MAX_LED;
+          setTimer1(250);
+      }
+
+      matrixScanTask();
+
+      if (timer2_flag == 1)
+      {
+          shiftMatrixLeft();
+          setTimer2(500);
+      }
+  }
+}
+
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) Error_Handler();
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) Error_Handler();
+}
+
+static void MX_TIM2_Init(void)
+{
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 7999;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 9;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK) Error_Handler();
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK) Error_Handler();
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK) Error_Handler();
+}
+
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef g = {0};
+  uint16_t pa_mask = 0xFFFC;   /* PA2..PA15 */
+  uint16_t pb_mask = 0xFF7F;   /* PB0..PB6 va PB8..PB15 */
+  int i;
+
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /* muc ban dau */
+  for (i = 0; i < 8; i++)
+  {
+      HAL_GPIO_WritePin(GPIOA, col_pin[i], COL_ON_LEVEL == GPIO_PIN_SET ? GPIO_PIN_RESET : GPIO_PIN_SET);
+      HAL_GPIO_WritePin(GPIOB, row_pin[i], ROW_ON_LEVEL == GPIO_PIN_SET ? GPIO_PIN_RESET : GPIO_PIN_SET);
+  }
+  for (i = 0; i < 4; i++) HAL_GPIO_WritePin(GPIOA, en_pin[i], GPIO_PIN_SET);
+  for (i = 0; i < 7; i++) HAL_GPIO_WritePin(GPIOB, seg_pin[i], GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, DOT_PIN, GPIO_PIN_RESET);      /* D2, D3 sang */
+  HAL_GPIO_WritePin(GPIOA, LEDRED_PIN, GPIO_PIN_RESET);   /* D1 sang     */
+
+  g.Mode = GPIO_MODE_OUTPUT_PP;
+  g.Pull = GPIO_NOPULL;
+  g.Speed = GPIO_SPEED_FREQ_LOW;
+
+  g.Pin = pa_mask;  HAL_GPIO_Init(GPIOA, &g);
+  g.Pin = pb_mask;  HAL_GPIO_Init(GPIOB, &g);
+}
+
+/* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM2) timer_run();
+}
+/* USER CODE END 4 */
+
+void Error_Handler(void)
+{
+  __disable_irq();
+  while (1) {}
+}
